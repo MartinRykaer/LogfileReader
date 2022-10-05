@@ -1,0 +1,203 @@
+"""
+Class that takes a filepath to a folder containing instrument log files. 
+These can be found on the instrument computer at: C:\ProgramData\Thermo\Exploris\Log
+
+Initiate with: 
+NAME = logfiles(filepath)
+
+take out dataframe with:
+yourDF = NAME.full
+cleaner version is 
+yourDF = NAME.printdf
+
+
+Read out columns with:
+NAME.columns
+
+I made a quick plot thing, but it's probably easier to just do it with an external dataframe..
+
+
+
+
+If you want to plot a specific value over time write:
+
+NAME.plotname(value)
+
+or write
+
+NAME.plotnumber(number)
+The number can be found through the NAME.columns output.
+
+
+
+
+If you want to define a range for your plots, use:
+
+NAME.def_plot_df()
+
+Tee values you can use here are 
+
+column: THe column you want to filter on, IE 'Gauge 0 - UHV (IKR270) [mbar]'
+
+firstdate:THe first date you want your plot to start from, IE '2022-09'01'
+
+lastdate: Like firstdate, but last date, IE '2022-10-12'
+
+maxlim: Highest value you want displayed in dataframe IE 0.000000001
+
+minlim: like maxlim...
+
+If anything is left blank it is just not used.
+
+if you want to take out this filtered DF:
+
+YOURDF = NAME.dfp
+
+
+Reset the plotdf by using:
+NAME.reset_plot_df()
+
+
+
+Example:
+filepath = 'H:\\Files related to instrument issues\\Expl5\\20220920'
+xyz = logfiles(filepath)
+mydf = xyz.printdf
+--> work with DF as you see fit.
+
+
+xyz.plotnumber(19) 
+#Plots UHV over whole time.
+
+or 
+
+xyz.def_plot_df(column = 'ICB.Gauge 0 - UHV (IKR270) [mbar]', firstdate = '2022-09-01', maxlim = 0.000000001 )
+
+xyz.plotnumber(19, savename = 20220901_UHV) 
+
+for a specific plot, also saves to "20220901_UHV.png" in the project folder.
+
+"""
+
+
+
+
+class logfiles:
+    
+    import pandas as pd
+    import os
+    import matplotlib.pyplot as plt
+    import datetime as dt
+    from tqdm import tqdm
+    
+    def __init__(self, path):
+        self.info = path
+        temp_files = []
+        for file in os.listdir(path):
+            if 'InstrumentTemperature--' in file:
+                temp_files.append(os.path.join(path, file))
+        
+        self.files=temp_files
+        self.filecount = len(temp_files)
+        
+        
+        for i in tqdm(range(len(temp_files))):
+    
+            if i == 0:
+
+                df = pd.read_csv(temp_files[i], sep = '\t')
+            else:
+                df = df.append(pd.read_csv(temp_files[i], sep = '\t',error_bad_lines=False), ignore_index=True)
+        
+        self.full = df
+        
+        df['DTDate'] = pd.to_datetime(df['Date'],errors='coerce')
+        
+        
+        
+        
+        if 'ICB.Gauge 0 - UHV (IKR270) [mbar]' in list(df.columns):
+        
+            self.printdf = df[~df['ICB.Gauge 0 - UHV (IKR270) [mbar]'].isnull()]
+            self.datatype = 'New'
+            
+        if 'Gauge 0 - UHV (IKR270) [mbar]' in list(df.columns):
+            self.printdf = df[~df['Gauge 0 - UHV (IKR270) [mbar]'].isnull()]
+            if self.datatype == 'New':
+                self.datatype == 'Mixed'
+                print('Caution this dataset has mixed types of new and old data.\t Good luck!')
+            else:
+                self.datatype = 'Old'
+        
+        
+        
+        d1 = {}
+        
+        for i, col in enumerate(df.columns):
+            d1[i]=col
+            
+        self.columns = d1
+        self.dfp = self.printdf
+    
+    def def_plot_df(self,column='0', firstdate='1', lastdate='1', maxlim=0, minlim=0):
+        
+        tempdf = self.printdf
+        
+        if firstdate == '1':
+            firstdate = self.printdf['DTDate'].min()
+        tempdf = tempdf[tempdf['DTDate'] > firstdate]
+
+        
+        if lastdate == '1':
+            lastdate = self.printdf['DTDate'].max()
+        tempdf = tempdf[tempdf['DTDate'] < lastdate]
+        
+        if column != '0':
+            tempdf[column] = pd.to_numeric(tempdf[column], errors ='coerce')
+            if maxlim == 0:
+                maxlim = tempdf[column].max()
+            tempdf = tempdf[tempdf[column] < maxlim]
+            
+            if minlim == 0:
+                minlim = tempdf[column].min()
+            tempdf = tempdf[tempdf[column] > minlim]
+            
+            
+        self.dfp = tempdf
+        
+    def reset_plot_df(self):
+        self.dfp = self.printdf
+        
+    
+        
+    def plotname(self, column, savename = '0'):
+        dfplot = self.dfp
+        dfplot[column] = pd.to_numeric(dfplot[column], errors ='coerce')
+        
+        plt.figure(figsize=(20,20))
+        plt.yticks(fontsize=18)
+        plt.xticks(fontsize=18)
+        plt.xticks(rotation=30)
+        plt.scatter(x=dfplot['DTDate'],y=dfplot[column].astype(float))
+        plt.title(column)
+        plt.show
+        if savename != '0':
+            plt.savefig(savename+'.png')
+
+    def plotnumber(self, i, savename = '0'):
+        
+        dfplot = self.dfp
+        column = self.columns[i]
+        dfplot[column] = pd.to_numeric(dfplot[column], errors ='coerce')
+
+        plt.figure(figsize=(20,20))
+        plt.yticks(fontsize=18)
+        plt.xticks(fontsize=18)
+        plt.xticks(rotation=30)
+        plt.scatter(x=dfplot['DTDate'],y=dfplot[column].astype(float))
+        plt.title(column)
+        plt.show
+        if savename != '0':
+            plt.savefig(savename+'.png')
+
+            
